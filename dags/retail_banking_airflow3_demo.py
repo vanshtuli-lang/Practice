@@ -48,7 +48,7 @@ def retail_banking_airflow3_demo():
         import io
         from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 
-        hook = S3Hook(aws_conn_id="aws_default")
+        hook = S3Hook(aws_conn_id="s3_read_write")
         content = hook.read_key(key=S3_KEY, bucket_name=S3_BUCKET)
 
         customers = []
