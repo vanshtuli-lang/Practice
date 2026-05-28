@@ -10,3 +10,5 @@ airflow-webserver.pid
 webserver_config.py
 airflow.cfg
 airflow.db
+include/rsa_key.p8
+include/rsa_key.pub
