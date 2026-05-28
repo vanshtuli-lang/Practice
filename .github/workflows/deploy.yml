@@ -1,0 +1,19 @@
+name: Deploy to Astro
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Deploy to Astro
+        uses: astronomer/deploy-action@v0.4
+        with:
+          deployment-id: cmppik87t16d701ld32ftjblj
+          api-token: ${{ secrets.ASTRO_API_TOKEN }}
