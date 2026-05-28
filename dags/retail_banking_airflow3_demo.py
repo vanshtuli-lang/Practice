@@ -12,7 +12,6 @@ Flow:
 
 from __future__ import annotations
 import csv
-import os
 from datetime import datetime
 from airflow.decorators import dag, task
 from airflow.utils.trigger_rule import TriggerRule
@@ -24,10 +23,7 @@ PREMIUM_RATE       = 0.15
 STANDARD_RATE      = 0.08
 STANDARD_FLOOR     = 2_000
 
-CSV_PATH = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)),
-    "..", "include", "daily_customer_applications.csv",
-)
+CSV_PATH = "/usr/local/airflow/include/daily_customer_applications.csv"
 
 default_args = {
     "owner": "banking-data-engineering",
