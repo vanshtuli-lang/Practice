@@ -6,3 +6,5 @@ logs/
 .venv
 airflow.db
 airflow.cfg
+include/rsa_key.p8
+include/rsa_key.pub

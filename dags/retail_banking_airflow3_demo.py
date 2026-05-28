@@ -2,7 +2,7 @@
 Daily credit card approval pipeline — Airflow 3 / Astro Runtime demo.
 
 Flow:
-  1. Ingest     – read 50-record customer CSV from include/
+  1. Ingest     – read customer CSV from S3 (vanshtuli-bucket)
   2. Branch     – split customers by income tier (>$100k = premium)
   3a. Premium   – assign Infinite Sapphire card, limit = 15% of income (parallel)
   3b. Standard  – assign Classic Rewards card,  limit = 8%  (floor $2k) (parallel)
@@ -11,10 +11,9 @@ Flow:
 """
 
 from __future__ import annotations
-import csv
 from datetime import datetime
-from airflow.decorators import dag, task
-from airflow.utils.trigger_rule import TriggerRule
+from airflow.sdk import dag, task
+from airflow.task.trigger_rule import TriggerRule
 
 PREMIUM_THRESHOLD  = 100_000
 PREMIUM_PRODUCT    = "Infinite Sapphire"
@@ -23,7 +22,8 @@ PREMIUM_RATE       = 0.15
 STANDARD_RATE      = 0.08
 STANDARD_FLOOR     = 2_000
 
-CSV_PATH = "/usr/local/airflow/include/daily_customer_applications.csv"
+S3_BUCKET = "vanshtuli-bucket"
+S3_KEY    = "CSV/daily_customer_applications.csv"
 
 default_args = {
     "owner": "banking-data-engineering",
@@ -43,15 +43,21 @@ def retail_banking_airflow3_demo():
 
     @task()
     def ingest_customer_data() -> list[dict]:
-        """Read the daily application CSV and return a list of customer dicts."""
+        """Read the daily application CSV from S3."""
+        import csv
+        import io
+        from airflow.providers.amazon.aws.hooks.s3 import S3Hook
+
+        hook = S3Hook(aws_conn_id="aws_default")
+        content = hook.read_key(key=S3_KEY, bucket_name=S3_BUCKET)
+
         customers = []
-        with open(CSV_PATH, newline="", encoding="utf-8") as fh:
-            for row in csv.DictReader(fh):
-                customers.append({
-                    "application_id": row["application_id"].strip(),
-                    "customer_name":  row["customer_name"].strip(),
-                    "annual_income":  int(row["annual_income"].strip()),
-                })
+        for row in csv.DictReader(io.StringIO(content)):
+            customers.append({
+                "application_id": row["application_id"].strip(),
+                "customer_name":  row["customer_name"].strip(),
+                "annual_income":  int(row["annual_income"].strip()),
+            })
 
         incomes = [c["annual_income"] for c in customers]
         print(f"Loaded {len(customers)} applications | "
@@ -60,25 +66,16 @@ def retail_banking_airflow3_demo():
 
     @task.branch
     def route_by_income_tier(customers: list[dict], **context) -> list[str]:
-        """
-        Split customers into premium vs standard lists and push both to XCom
-        under named keys.  Return the task IDs that should run next — Airflow
-        automatically SKIPs any branch not listed here.
-        """
         ti = context["ti"]
-
         premium  = [c for c in customers if c["annual_income"] >  PREMIUM_THRESHOLD]
         standard = [c for c in customers if c["annual_income"] <= PREMIUM_THRESHOLD]
 
-        # Named keys so Tasks 3a/3b can pull their slice independently
         ti.xcom_push(key="premium_customers",  value=premium)
         ti.xcom_push(key="standard_customers", value=standard)
 
         print(f"Premium ({len(premium)}) → approve_premium_cards")
         print(f"Standard ({len(standard)}) → approve_standard_cards")
 
-        """Logic below is handling cases where only 1 type exist and hence other task can be skipped. 
-            In the case of both types, the tasks will run in parallel."""
         branches = []
         if premium:
             branches.append("approve_premium_cards")
@@ -123,8 +120,8 @@ def retail_banking_airflow3_demo():
 
     @task(trigger_rule=TriggerRule.NONE_FAILED_MIN_ONE_SUCCESS)
     def log_approval_summary(
-            premium_portfolio: list | None = None,
-            standard_portfolio: list | None = None,
+        premium_portfolio:  list | None = None,
+        standard_portfolio: list | None = None,
     ) -> dict:
         all_accounts = (premium_portfolio or []) + (standard_portfolio or [])
 
@@ -132,50 +129,72 @@ def retail_banking_airflow3_demo():
             return {"total_accounts": 0, "total_credit_volume": 0.0, "approved_portfolios": []}
 
         total_vol = sum(c["credit_limit"] for c in all_accounts)
-
         summary = {
-            "total_accounts": len(all_accounts),
+            "total_accounts":      len(all_accounts),
             "total_credit_volume": round(total_vol, 2),
-            "avg_credit_limit": round(total_vol / len(all_accounts), 2),
+            "avg_credit_limit":    round(total_vol / len(all_accounts), 2),
             "approved_portfolios": all_accounts,
         }
-
         print(summary)
         return summary
 
     @task()
-    def upsert_to_core_banking(summary: dict) -> None:
+    def upsert_to_snowflake(summary: dict) -> None:
         """
-        Mock UPSERT to the credit_accounts table.
-
-        In production this would use PostgresHook with an ON CONFLICT DO UPDATE
-        statement so re-runs are safe.
+        Batch MERGE into SANDBOX.VANSHTULI.CREDIT_ACCOUNTS via a single hook.run() call.
+        Builds a multi-row VALUES clause so all records hit Snowflake in one round-trip.
+        Safe to re-run — existing rows get their limit refreshed, new ones get inserted.
         """
-        portfolios    = summary.get("approved_portfolios", [])
-        total         = summary.get("total_accounts", 0)
-        insert_count  = 0
-        update_count  = 0
+        from airflow.providers.snowflake.hooks.snowflake import SnowflakeHook
 
-        print(f"\nUPSERT → cbs_postgres_prod.public.credit_accounts  ({total} records)")
-        print("-" * 68)
+        portfolios = summary.get("approved_portfolios", [])
+        if not portfolios:
+            print("No records to upsert.")
+            return
 
-        for idx, r in enumerate(portfolios):
-            # Every 3rd record simulates a returning customer (would be a SELECT in prod)
-            if idx % 3 == 0:
-                update_count += 1
-                print(f"  UPDATE  {r['application_id']}  {r['customer_name']:25s}  limit → ${r['credit_limit']:,.2f}")
-            else:
-                insert_count += 1
-                print(f"  INSERT  {r['application_id']}  {r['customer_name']:25s}  limit = ${r['credit_limit']:,.2f}")
+        hook = SnowflakeHook(snowflake_conn_id="snowflake")
 
-        print("-" * 68)
-        print(f"  Inserted: {insert_count}  |  Updated: {update_count}  |  Total: {total}")
-    #dependencies and wiring the dag
+        # Build a single VALUES block for all rows so the entire batch is one statement
+        row_placeholders = ",\n            ".join(["(%s, %s, %s, %s, %s, %s)"] * len(portfolios))
+        params = []
+        for r in portfolios:
+            params.extend([
+                r["application_id"], r["customer_name"], r["annual_income"],
+                r["card_product"], r["credit_limit"], r["income_tier"],
+            ])
+
+        merge_sql = f"""
+            MERGE INTO SANDBOX.VANSHTULI.CREDIT_ACCOUNTS AS target
+            USING (
+                SELECT APPLICATION_ID, CUSTOMER_NAME, ANNUAL_INCOME,
+                       CARD_PRODUCT, CREDIT_LIMIT, INCOME_TIER
+                FROM VALUES
+                    {row_placeholders}
+                AS source(APPLICATION_ID, CUSTOMER_NAME, ANNUAL_INCOME,
+                          CARD_PRODUCT, CREDIT_LIMIT, INCOME_TIER)
+            ) AS source
+            ON target.APPLICATION_ID = source.APPLICATION_ID
+            WHEN MATCHED THEN UPDATE SET
+                CREDIT_LIMIT = source.CREDIT_LIMIT,
+                LAST_UPDATED = CURRENT_TIMESTAMP()
+            WHEN NOT MATCHED THEN INSERT (
+                APPLICATION_ID, CUSTOMER_NAME, ANNUAL_INCOME,
+                CARD_PRODUCT, CREDIT_LIMIT, INCOME_TIER
+            ) VALUES (
+                source.APPLICATION_ID, source.CUSTOMER_NAME, source.ANNUAL_INCOME,
+                source.CARD_PRODUCT, source.CREDIT_LIMIT, source.INCOME_TIER
+            )
+        """
+
+        hook.run(merge_sql, parameters=params)
+
+        print(f"\nUPSERT → SANDBOX.VANSHTULI.CREDIT_ACCOUNTS ({len(portfolios)} records)")
+        print(f"Batch MERGE committed via hook.run() — {len(portfolios)} rows processed.")
+
+    # --- wire up the DAG ---
     customers = ingest_customer_data()
     branch    = route_by_income_tier(customers)
 
-    # Tasks 3a/3b pull their data from the branch task's named XCom keys,
-    # so we wire the branch edge explicitly rather than passing args here.
     premium_portfolio  = approve_premium_cards()
     standard_portfolio = approve_standard_cards()
     branch >> [premium_portfolio, standard_portfolio]
@@ -184,7 +203,7 @@ def retail_banking_airflow3_demo():
         premium_portfolio=premium_portfolio,
         standard_portfolio=standard_portfolio,
     )
-    upsert_to_core_banking(summary)
+    upsert_to_snowflake(summary)
 
 
 retail_banking_airflow3_demo()
