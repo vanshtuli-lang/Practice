@@ -12,3 +12,7 @@ airflow.cfg
 airflow.db
 include/rsa_key.p8
 include/rsa_key.pub
+include/*.p8
+include/*.pub
+include/*.pem
+mock_clickstream_orders.parquet

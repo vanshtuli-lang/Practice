@@ -1,0 +1,66 @@
+##############################################################################
+# schema.yml — staging layer
+#
+# Column-level documentation and dbt tests for stg_clickstream.
+# These tests run during `dbt test` and can be triggered by Cosmos via the
+# DbtTestOperator if test execution is enabled in the RenderConfig.
+##############################################################################
+
+version: 2
+
+models:
+  - name: stg_clickstream
+    description: >
+      Cleaned and structured view of the raw clickstream landing table.
+      Parses the free-text user_agent into structured browser and os columns
+      using Snowflake CASE / ILIKE expressions.  Materialised as a view so
+      it always reflects the most recent ingestion.
+    columns:
+      - name: order_id
+        description: "Synthetic order identifier."
+        tests:
+          - not_null
+
+      - name: customer_id
+        description: "Synthetic customer identifier."
+        tests:
+          - not_null
+
+      - name: order_date
+        description: "Order timestamp (UTC)."
+        tests:
+          - not_null
+
+      - name: subtotal
+        description: "Pre-tax order value in USD."
+        tests:
+          - not_null
+
+      - name: tax
+        description: "Tax portion of the order in USD."
+        tests:
+          - not_null
+
+      - name: click_id
+        description: "Unique click-tracking token."
+        tests:
+          - not_null
+
+      - name: session_duration_secs
+        description: "Web session length in seconds."
+        tests:
+          - not_null
+
+      - name: browser
+        description: "Parsed browser type (Chrome, Safari, Firefox, Edge, Opera, Other)."
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["Chrome", "Safari", "Firefox", "Edge", "Opera", "Other"]
+
+      - name: os
+        description: "Parsed operating system (Windows, macOS, Android, iOS, Linux, Other)."
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["Windows", "macOS", "Android", "iOS", "Linux", "Other"]

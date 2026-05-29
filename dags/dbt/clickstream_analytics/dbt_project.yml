@@ -1,0 +1,48 @@
+##############################################################################
+# dbt_project.yml — clickstream_analytics
+#
+# This dbt project transforms raw clickstream orders (S3 → Snowflake) into a
+# per-customer metrics mart.  Orchestrated by Astronomer Cosmos inside the
+# s3_to_snowflake_dbt Airflow DAG.
+#
+# Profile credentials are NOT stored here.  Cosmos generates the runtime
+# profile from the `snowflake` Airflow connection via
+# SnowflakeUserPasswordProfileMapping.
+##############################################################################
+
+name: "clickstream_analytics"
+version: "1.0.0"
+config-version: 2
+
+# Profile name must match the profile_name set in the Cosmos ProfileConfig.
+profile: "clickstream_analytics"
+
+# Standard dbt path configuration.
+model-paths:    ["models"]
+analysis-paths: ["analyses"]
+test-paths:     ["tests"]
+seed-paths:     ["seeds"]
+macro-paths:    ["macros"]
+snapshot-paths: ["snapshots"]
+
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+##############################################################################
+# Model materialisation strategy
+#
+# staging/ — Views: lightweight, always reflect the raw source exactly.
+# marts/   — Tables: persisted for downstream BI tooling.
+#
+# Note: no +schema: overrides — everything writes to the schema configured
+# in the Cosmos ProfileConfig (VANSHTULI).  Custom schemas would require
+# CREATE SCHEMA privilege on the database, which the VANSHTULI role does not have.
+##############################################################################
+models:
+  clickstream_analytics:
+    staging:
+      +materialized: view
+    marts:
+      +materialized: table

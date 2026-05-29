@@ -1,3 +1,21 @@
-# Astro Runtime includes the following pre-installed providers packages: https://www.astronomer.io/docs/astro/runtime-image-architecture#provider-packages
+# Astro Runtime 3.2-4 ships Airflow 3.x and the following provider packages:
+# https://www.astronomer.io/docs/astro/runtime-image-architecture#provider-packages
 apache-airflow-providers-amazon
 apache-airflow-providers-snowflake
+
+# ── airflow.io ObjectStoragePath backend for S3 ────────────────────────────────
+# Provides the s3:// filesystem abstraction used by both DAGs.
+s3fs
+
+# ── Astronomer Cosmos: renders dbt models as Airflow tasks ────────────────────
+astronomer-cosmos>=1.7.0
+
+# ── dbt adapter for Snowflake (used by Cosmos in LOCAL execution mode) ────────
+dbt-snowflake>=1.8.0
+
+# ── Testing ───────────────────────────────────────────────────────────────────
+pytest>=8.0.0
+
+# Note: pandas, pyarrow, and the snowflake connector ship transitively with
+# apache-airflow-providers-snowflake — no explicit pin needed and avoids the
+# Python-3.13 numpy build failures triggered by astro-sdk's stale pins.
