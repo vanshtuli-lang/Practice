@@ -1,13 +1,13 @@
 """
-Daily credit card approval pipeline — Airflow 3 / Astro Runtime demo.
+Daily credit card approval pipeline — Astro Runtime demo (AF3)
 
 Flow:
-  1. Ingest     – read customer CSV from S3 (vanshtuli-bucket)
-  2. Branch     – split customers by income tier (>$100k = premium)
-  3a. Premium   – assign Infinite Sapphire card, limit = 15% of income (parallel)
-  3b. Standard  – assign Classic Rewards card,  limit = 8%  (floor $2k) (parallel)
-  4. Summary    – join both branches, print approval metrics
-  5. UPSERT     – mock write to Core Banking System (CBS) database
+  1. Ingest - read customer CSV from S3 (vanshtuli-bucket)
+  2. Branch - split customers by income tier (>$100k = premium)
+  3a. Premium - assign Infinite Sapphire card, limit = 15% of income (parallel)
+  3b. Standard - assign Classic Rewards card,  limit = 8%  (floor $2k) (parallel)
+  4. Summary - join both branches, print approval metrics
+  5. UPSERT - mock write to Core Banking System (CBS) database
 """
 
 from __future__ import annotations
@@ -26,20 +26,20 @@ S3_BUCKET = "vanshtuli-bucket"
 S3_KEY    = "CSV/daily_customer_applications.csv"
 
 default_args = {
-    "owner": "banking-data-engineering",
+    "owner": "vansh-tuli",
     "retries": 0,
 }
 
 
 @dag(
-    dag_id="retail_banking_airflow3_demo",
+    dag_id="credit_card_provider_flow_AF3",
+    default_args=default_args,
     schedule="@daily",
     start_date=datetime(2025, 1, 1),
     catchup=False,
-    default_args=default_args,
     tags=["retail-banking", "credit-cards", "airflow3-demo"],
 )
-def retail_banking_airflow3_demo():
+def credit_card_provider_flow_AF3():
 
     @task()
     def ingest_customer_data() -> list[dict]:
@@ -191,7 +191,7 @@ def retail_banking_airflow3_demo():
         print(f"\nUPSERT → SANDBOX.VANSHTULI.CREDIT_ACCOUNTS ({len(portfolios)} records)")
         print(f"Batch MERGE committed via hook.run() — {len(portfolios)} rows processed.")
 
-    # --- wire up the DAG ---
+    #dependency graph for the DAG
     customers = ingest_customer_data()
     branch    = route_by_income_tier(customers)
 
@@ -206,4 +206,4 @@ def retail_banking_airflow3_demo():
     upsert_to_snowflake(summary)
 
 
-retail_banking_airflow3_demo()
+credit_card_provider_flow_AF3()
