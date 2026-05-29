@@ -1,0 +1,61 @@
+##############################################################################
+# schema.yml — marts layer
+#
+# Documentation and dbt tests for fct_customer_metrics.
+##############################################################################
+
+version: 2
+
+models:
+  - name: fct_customer_metrics
+    description: >
+      One row per unique customer.  Aggregates total spend, order count,
+      average session duration, most common browser and OS, derived from
+      stg_clickstream.  Materialised as a TABLE for query performance.
+      This is the dbt Branch A output; the equivalent Branch B output lands
+      in the py_customer_metrics Snowflake table.
+    columns:
+      - name: customer_id
+        description: "Unique customer identifier — primary key of this fact table."
+        tests:
+          - not_null
+          - unique
+
+      - name: total_orders
+        description: "Count of distinct order_id values for this customer."
+        tests:
+          - not_null
+
+      - name: total_subtotal
+        description: "Sum of subtotal across all orders (USD, 2 d.p.)."
+        tests:
+          - not_null
+
+      - name: total_tax
+        description: "Sum of tax across all orders (USD, 2 d.p.)."
+        tests:
+          - not_null
+
+      - name: total_spend
+        description: "total_subtotal + total_tax (USD, 2 d.p.)."
+        tests:
+          - not_null
+
+      - name: avg_session_duration_secs
+        description: "Mean session duration across all sessions for this customer (2 d.p.)."
+        tests:
+          - not_null
+
+      - name: most_common_browser
+        description: "Most frequently used browser.  Ties broken alphabetically."
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["Chrome", "Safari", "Firefox", "Edge", "Opera", "Other"]
+
+      - name: most_common_os
+        description: "Most frequently used OS.  Ties broken alphabetically."
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["Windows", "macOS", "Android", "iOS", "Linux", "Other"]

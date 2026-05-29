@@ -1,0 +1,42 @@
+##############################################################################
+# sources.yml — staging layer
+#
+# Declares the raw Snowflake table that is loaded upstream by the Airflow
+# aql.load_file task.  Using {{ source() }} rather than a hardcoded table
+# reference gives us dbt's lineage tracking, source freshness checks, and
+# the ability to swap schema/database without touching model SQL.
+##############################################################################
+
+version: 2
+
+sources:
+  - name: raw
+    description: >
+      Raw landing zone populated by the Airflow aql.load_file ingestion task.
+      Tables here are write-once per DAG run (if_exists='replace') and should
+      be treated as immutable source-of-truth for the current benchmark run.
+    database: SANDBOX
+    schema:   VANSHTULI
+    tables:
+      - name: raw_clickstream_orders
+        description: >
+          1 000 000-row synthetic e-commerce clickstream dataset loaded from
+          S3 (parquet/mock_clickstream_orders.parquet).  Each row represents
+          one web session that produced an order event.
+        columns:
+          - name: order_id
+            description: "Synthetic order identifier (100 000 – 999 999)."
+          - name: customer_id
+            description: "Synthetic customer identifier (1 001 – 49 999)."
+          - name: order_date
+            description: "Order timestamp (UTC); spans the month of 2026-01."
+          - name: subtotal
+            description: "Order subtotal before tax (USD, 2 d.p.)."
+          - name: tax
+            description: "Tax amount applied to the order (USD, 2 d.p.)."
+          - name: click_id
+            description: "Unique click-tracking token (clk-XXXXXXX)."
+          - name: user_agent
+            description: "Raw HTTP User-Agent string from the browser session."
+          - name: session_duration_secs
+            description: "Length of the web session in seconds (10 – 1 800)."
