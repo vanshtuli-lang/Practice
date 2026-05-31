@@ -100,7 +100,10 @@ def s3_to_snowflake_python():
 
         hook = SnowflakeHook(snowflake_conn_id=SNOWFLAKE_CONN_ID)
 
+        # Snowflake requires INSERT INTO before the WITH clause, not after
         hook.run(f"""
+            INSERT INTO {SNOWFLAKE_DATABASE}.{SNOWFLAKE_SCHEMA}.{OUTPUT_TABLE}
+                (CUSTOMER_ID, TOTAL_ORDERS, TOTAL_SPEND, AVG_SESSION_DURATION_SECS, MOST_COMMON_BROWSER, MOST_COMMON_OS)
             WITH parsed AS (
                 SELECT
                     CUSTOMER_ID,
@@ -146,8 +149,6 @@ def s3_to_snowflake_python():
                 GROUP BY CUSTOMER_ID, OS
                 QUALIFY ROW_NUMBER() OVER (PARTITION BY CUSTOMER_ID ORDER BY COUNT(*) DESC) = 1
             )
-            INSERT INTO {SNOWFLAKE_DATABASE}.{SNOWFLAKE_SCHEMA}.{OUTPUT_TABLE}
-                (CUSTOMER_ID, TOTAL_ORDERS, TOTAL_SPEND, AVG_SESSION_DURATION_SECS, MOST_COMMON_BROWSER, MOST_COMMON_OS)
             SELECT
                 m.CUSTOMER_ID, m.TOTAL_ORDERS, m.TOTAL_SPEND, m.AVG_SESSION_DURATION_SECS,
                 b.MOST_COMMON_BROWSER, o.MOST_COMMON_OS
