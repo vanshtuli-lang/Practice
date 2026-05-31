@@ -30,19 +30,14 @@ clean-targets:
   - "target"
   - "dbt_packages"
 
-##############################################################################
-# Model materialisation strategy
-#
-# staging/ — Views: lightweight, always reflect the raw source exactly.
-# marts/   — Tables: persisted for downstream BI tooling.
-#
-# Note: no +schema: overrides — everything writes to the schema configured
-# in the Cosmos ProfileConfig (VANSHTULI).  Custom schemas would require
-# CREATE SCHEMA privilege on the database, which the VANSHTULI role does not have.
-##############################################################################
+# staging is ephemeral so dbt never creates a view object in Snowflake —
+# the CTE gets inlined directly into the mart query. This avoids needing
+# CREATE VIEW privilege.
+# marts uses incremental so dbt runs a MERGE on the pre-existing table
+# instead of CREATE OR REPLACE TABLE. Only needs INSERT + UPDATE.
 models:
   clickstream_analytics:
     staging:
-      +materialized: view
+      +materialized: ephemeral
     marts:
-      +materialized: table
+      +materialized: incremental
