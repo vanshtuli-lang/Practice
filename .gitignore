@@ -16,3 +16,4 @@ include/*.p8
 include/*.pub
 include/*.pem
 mock_clickstream_orders.parquet
+*.vsc.xml
