@@ -17,3 +17,7 @@ include/*.pub
 include/*.pem
 mock_clickstream_orders.parquet
 *.vsc.xml
+
+# Claude Code — local only, not shared via git
+.claude/
+CLAUDE.md

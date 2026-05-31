@@ -91,81 +91,72 @@ def s3_to_snowflake_python():
         return nrows
 
     @task(outlets=[py_customer_metrics_asset])
-    def python_transform() -> int:
+    def python_transform() -> None:
         """
-        Read raw_clickstream_orders, parse user_agent, aggregate per-customer
-        metrics, and write the mart to py_customer_metrics.
+        Parse user_agent and roll up per-customer metrics entirely in Snowflake SQL.
+        No data is pulled into the worker - avoids OOM on the 1M row table.
         """
-        import numpy as np
         from airflow.providers.snowflake.hooks.snowflake import SnowflakeHook
 
-        sf = SnowflakeHook(snowflake_conn_id=SNOWFLAKE_CONN_ID)
+        hook = SnowflakeHook(snowflake_conn_id=SNOWFLAKE_CONN_ID)
 
-        # ── Load the raw landing table into Pandas ────────────────────────────
-        raw = sf.get_pandas_df(
-            f"SELECT * FROM {SNOWFLAKE_DATABASE}.{SNOWFLAKE_SCHEMA}.{RAW_TABLE}"
-        )
-        raw.columns = [c.lower() for c in raw.columns]   # normalise to lower
-
-        # parse user_agent to browser (Edge before Chrome, Chrome's UA contains "Safari")
-        ua = raw["user_agent"]
-        raw["browser"] = np.select(
-            [
-                ua.str.contains("Edg/",       case=False, na=False),
-                ua.str.contains("Chrome/",    case=False, na=False),
-                ua.str.contains("Firefox/",   case=False, na=False),
-                ua.str.contains("Safari/",    case=False, na=False),
-                ua.str.contains("Opera|OPR/", case=False, na=False, regex=True),
-            ],
-            ["Edge", "Chrome", "Firefox", "Safari", "Opera"],
-            default="Other",
-        )
-
-        # parse user_agent to OS (Android before Linux, Android UAs contain "Linux")
-        raw["os"] = np.select(
-            [
-                ua.str.contains("Windows NT",  case=False, na=False),
-                ua.str.contains("Macintosh",   case=False, na=False),
-                ua.str.contains("Android",     case=False, na=False),
-                ua.str.contains("iPhone|iPad", case=False, na=False, regex=True),
-                ua.str.contains("Linux",       case=False, na=False),
-            ],
-            ["Windows", "macOS", "Android", "iOS", "Linux"],
-            default="Other",
-        )
-
-        # ── Aggregate per-customer metrics ────────────────────────────────────
-        metrics = (
-            raw.groupby("customer_id")
-            .agg(
-                total_orders              = ("order_id",              "count"),
-                total_subtotal            = ("subtotal",              "sum"),
-                total_tax                 = ("tax",                   "sum"),
-                avg_session_duration_secs = ("session_duration_secs", "mean"),
-                most_common_browser       = ("browser", lambda s: s.mode()[0]),
-                most_common_os            = ("os",      lambda s: s.mode()[0]),
+        hook.run(f"""
+            WITH parsed AS (
+                SELECT
+                    CUSTOMER_ID,
+                    ORDER_ID,
+                    SUBTOTAL + TAX AS SPEND,
+                    SESSION_DURATION_SECS,
+                    CASE
+                        WHEN USER_AGENT ILIKE '%Edg/%'    THEN 'Edge'
+                        WHEN USER_AGENT ILIKE '%Chrome/%'  THEN 'Chrome'
+                        WHEN USER_AGENT ILIKE '%Firefox/%' THEN 'Firefox'
+                        WHEN USER_AGENT ILIKE '%Safari/%'  THEN 'Safari'
+                        WHEN USER_AGENT ILIKE '%Opera%' OR USER_AGENT ILIKE '%OPR/%' THEN 'Opera'
+                        ELSE 'Other'
+                    END AS BROWSER,
+                    CASE
+                        WHEN USER_AGENT ILIKE '%Windows NT%' THEN 'Windows'
+                        WHEN USER_AGENT ILIKE '%Macintosh%'  THEN 'macOS'
+                        WHEN USER_AGENT ILIKE '%Android%'    THEN 'Android'
+                        WHEN USER_AGENT ILIKE '%iPhone%' OR USER_AGENT ILIKE '%iPad%' THEN 'iOS'
+                        WHEN USER_AGENT ILIKE '%Linux%'      THEN 'Linux'
+                        ELSE 'Other'
+                    END AS OS
+                FROM {SNOWFLAKE_DATABASE}.{SNOWFLAKE_SCHEMA}.{RAW_TABLE}
+            ),
+            base_metrics AS (
+                SELECT
+                    CUSTOMER_ID,
+                    COUNT(ORDER_ID)                      AS TOTAL_ORDERS,
+                    ROUND(SUM(SPEND), 2)                 AS TOTAL_SPEND,
+                    ROUND(AVG(SESSION_DURATION_SECS), 2) AS AVG_SESSION_DURATION_SECS
+                FROM parsed
+                GROUP BY CUSTOMER_ID
+            ),
+            top_browser AS (
+                SELECT CUSTOMER_ID, BROWSER AS MOST_COMMON_BROWSER
+                FROM parsed
+                GROUP BY CUSTOMER_ID, BROWSER
+                QUALIFY ROW_NUMBER() OVER (PARTITION BY CUSTOMER_ID ORDER BY COUNT(*) DESC) = 1
+            ),
+            top_os AS (
+                SELECT CUSTOMER_ID, OS AS MOST_COMMON_OS
+                FROM parsed
+                GROUP BY CUSTOMER_ID, OS
+                QUALIFY ROW_NUMBER() OVER (PARTITION BY CUSTOMER_ID ORDER BY COUNT(*) DESC) = 1
             )
-            .reset_index()
-        )
-        metrics["total_spend"] = (metrics["total_subtotal"] + metrics["total_tax"]).round(2)
-        metrics["avg_session_duration_secs"] = metrics["avg_session_duration_secs"].round(2)
-        metrics.drop(columns=["total_subtotal", "total_tax"], inplace=True)
+            INSERT INTO {SNOWFLAKE_DATABASE}.{SNOWFLAKE_SCHEMA}.{OUTPUT_TABLE}
+                (CUSTOMER_ID, TOTAL_ORDERS, TOTAL_SPEND, AVG_SESSION_DURATION_SECS, MOST_COMMON_BROWSER, MOST_COMMON_OS)
+            SELECT
+                m.CUSTOMER_ID, m.TOTAL_ORDERS, m.TOTAL_SPEND, m.AVG_SESSION_DURATION_SECS,
+                b.MOST_COMMON_BROWSER, o.MOST_COMMON_OS
+            FROM base_metrics m
+            JOIN top_browser b ON m.CUSTOMER_ID = b.CUSTOMER_ID
+            JOIN top_os      o ON m.CUSTOMER_ID = o.CUSTOMER_ID
+        """)
 
-        # ── Write the mart back to Snowflake ──────────────────────────────────
-        from snowflake.connector.pandas_tools import write_pandas
-
-        with sf.get_conn() as conn:
-            success, _, nrows, _ = write_pandas(
-                conn,
-                metrics,
-                table_name        = OUTPUT_TABLE,
-                database          = SNOWFLAKE_DATABASE,
-                schema            = SNOWFLAKE_SCHEMA,
-                quote_identifiers = False,
-            )
-        assert success, "Snowflake write_pandas() reported failure"
-        print(f"Wrote {nrows:,} customer rows into {SNOWFLAKE_DATABASE}.{SNOWFLAKE_SCHEMA}.{OUTPUT_TABLE}")
-        return nrows
+        print(f"Transform complete: metrics written into {SNOWFLAKE_DATABASE}.{SNOWFLAKE_SCHEMA}.{OUTPUT_TABLE}")
 
     wait_for_s3_file >> load_raw_data() >> python_transform()
 

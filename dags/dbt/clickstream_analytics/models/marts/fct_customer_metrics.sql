@@ -1,3 +1,5 @@
+{{ config(unique_key='customer_id') }}
+
 /*
   fct_customer_metrics.sql
   ════════════════════════
