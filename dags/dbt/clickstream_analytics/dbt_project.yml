@@ -1,7 +1,7 @@
 ##############################################################################
 # dbt_project.yml — clickstream_analytics
 #
-# This dbt project transforms raw clickstream orders (S3 → Snowflake) into a
+# This dbt project transforms raw clickstream orders (S3 to Snowflake) into a
 # per-customer metrics mart.  Orchestrated by Astronomer Cosmos inside the
 # s3_to_snowflake_dbt Airflow DAG.
 #

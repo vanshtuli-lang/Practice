@@ -1,13 +1,10 @@
 """
-Daily credit card approval pipeline — Astro Runtime demo (AF3)
+Daily credit card approval pipeline.
 
-Flow:
-  1. Ingest - read customer CSV from S3 (vanshtuli-bucket)
-  2. Branch - split customers by income tier (>$100k = premium)
-  3a. Premium - assign Infinite Sapphire card, limit = 15% of income (parallel)
-  3b. Standard - assign Classic Rewards card,  limit = 8%  (floor $2k) (parallel)
-  4. Summary - join both branches, print approval metrics
-  5. UPSERT - mock write to Core Banking System (CBS) database
+Reads customer applications from S3, splits by income tier, assigns card products
+and credit limits, then upserts results to Snowflake. Premium customers (>$100k income)
+get the Infinite Sapphire at 15% of income, standard customers get Classic Rewards
+at 8% with a $2k floor.
 """
 
 from __future__ import annotations
@@ -73,8 +70,8 @@ def credit_card_provider_flow_AF3():
         ti.xcom_push(key="premium_customers",  value=premium)
         ti.xcom_push(key="standard_customers", value=standard)
 
-        print(f"Premium ({len(premium)}) → approve_premium_cards")
-        print(f"Standard ({len(standard)}) → approve_standard_cards")
+        print(f"Premium ({len(premium)}) -> approve_premium_cards")
+        print(f"Standard ({len(standard)}) -> approve_standard_cards")
 
         branches = []
         if premium:
@@ -94,7 +91,7 @@ def credit_card_provider_flow_AF3():
         for c in customers:
             limit = round(c["annual_income"] * PREMIUM_RATE, 2)
             portfolio.append({**c, "card_product": PREMIUM_PRODUCT, "credit_limit": limit, "income_tier": "PREMIUM"})
-            print(f"  {c['application_id']}  {c['customer_name']:25s}  ${c['annual_income']:,}  →  ${limit:,.2f}")
+            print(f"  {c['application_id']}  {c['customer_name']:25s}  ${c['annual_income']:,}  ->  ${limit:,.2f}")
 
         print(f"\n{len(portfolio)} approved on {PREMIUM_PRODUCT} | "
               f"volume ${sum(p['credit_limit'] for p in portfolio):,.2f}")
@@ -112,7 +109,7 @@ def credit_card_provider_flow_AF3():
             limit = round(max(c["annual_income"] * STANDARD_RATE, STANDARD_FLOOR), 2)
             floor_note = " [floor applied]" if c["annual_income"] * STANDARD_RATE < STANDARD_FLOOR else ""
             portfolio.append({**c, "card_product": STANDARD_PRODUCT, "credit_limit": limit, "income_tier": "STANDARD"})
-            print(f"  {c['application_id']}  {c['customer_name']:25s}  ${c['annual_income']:,}  →  ${limit:,.2f}{floor_note}")
+            print(f"  {c['application_id']}  {c['customer_name']:25s}  ${c['annual_income']:,}  ->  ${limit:,.2f}{floor_note}")
 
         print(f"\n{len(portfolio)} approved on {STANDARD_PRODUCT} | "
               f"volume ${sum(p['credit_limit'] for p in portfolio):,.2f}")
@@ -188,7 +185,7 @@ def credit_card_provider_flow_AF3():
 
         hook.run(merge_sql, parameters=params)
 
-        print(f"\nUPSERT → SANDBOX.VANSHTULI.CREDIT_ACCOUNTS ({len(portfolios)} records)")
+        print(f"\nUPSERT complete: SANDBOX.VANSHTULI.CREDIT_ACCOUNTS ({len(portfolios)} records)")
         print(f"Batch MERGE committed via hook.run() — {len(portfolios)} rows processed.")
 
     #dependency graph for the DAG
