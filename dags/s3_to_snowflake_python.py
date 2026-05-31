@@ -1,21 +1,12 @@
 """
-S3 → Snowflake clickstream pipeline (native Python + Pandas + SQL)
+Loads clickstream orders from S3 into Snowflake and builds a per-customer metrics table using Python/Pandas.
 
-Flow:
-  1. wait_for_s3_file — deferrable S3KeySensor (frees worker slot while waiting)
-  2. load_raw_data    — ObjectStoragePath pulls the Parquet, write_pandas loads it
-  3. python_transform — parse user_agent, aggregate per-customer metrics,
-                        write to py_customer_metrics
+Waits for the parquet file to land in S3, bulk loads it into RAW_CLICKSTREAM_ORDERS,
+then runs a pandas transform to produce PY_CUSTOMER_METRICS.
 
-Astro / Airflow 3 features used:
-  • airflow.io ObjectStorage — cloud-agnostic file I/O
-  • Deferrable S3 sensor     — async waiting via Astro Runtime triggerer
-  • Asset outlet             — downstream DAGs can schedule on data changes
-  • owner_links              — owner clickable in the Airflow UI
-
-  This is click stream data - Customer X spent $Y on date Z, using device W, after browsing for N seconds.
-  Total of 1 M rows in the data set.
-  Waiting for file in S3 -> parsing the user_agent field (example field: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15
+This is click stream data - Customer X spent $Y on date Z, using device W, after browsing for N seconds.
+Total of 1 M rows in the data set.
+Waiting for file in S3 -> parsing the user_agent field (example field: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15
  (KHTML, like Gecko) Version/17.3 Safari/605.1.15) -> to bring out browser = safari and os = macOS
 We create a final METRICS table that has aggregate of data per customer -> total orders, total, spend, avg session duration, popular ordering platform etc
 """
@@ -93,12 +84,10 @@ def s3_to_snowflake_python():
                 table_name        = RAW_TABLE,
                 database          = SNOWFLAKE_DATABASE,
                 schema            = SNOWFLAKE_SCHEMA,
-                auto_create_table = True,
-                overwrite         = True,
                 quote_identifiers = False,
             )
         assert success, "Snowflake write_pandas() reported failure"
-        print(f"Loaded {nrows:,} rows → {SNOWFLAKE_DATABASE}.{SNOWFLAKE_SCHEMA}.{RAW_TABLE}")
+        print(f"Loaded {nrows:,} rows into {SNOWFLAKE_DATABASE}.{SNOWFLAKE_SCHEMA}.{RAW_TABLE}")
         return nrows
 
     @task(outlets=[py_customer_metrics_asset])
@@ -109,7 +98,6 @@ def s3_to_snowflake_python():
         """
         import numpy as np
         from airflow.providers.snowflake.hooks.snowflake import SnowflakeHook
-        from snowflake.connector.pandas_tools import write_pandas
 
         sf = SnowflakeHook(snowflake_conn_id=SNOWFLAKE_CONN_ID)
 
@@ -117,10 +105,9 @@ def s3_to_snowflake_python():
         raw = sf.get_pandas_df(
             f"SELECT * FROM {SNOWFLAKE_DATABASE}.{SNOWFLAKE_SCHEMA}.{RAW_TABLE}"
         )
-        raw.columns = [c.lower() for c in raw.columns]   # normalise UPPER → lower
+        raw.columns = [c.lower() for c in raw.columns]   # normalise to lower
 
-        # ── Parse user_agent → browser  (priority order matters: Edge before
-        #    Chrome; Chrome's UA contains "Safari" as a compatibility hint) ───
+        # parse user_agent to browser (Edge before Chrome, Chrome's UA contains "Safari")
         ua = raw["user_agent"]
         raw["browser"] = np.select(
             [
@@ -134,8 +121,7 @@ def s3_to_snowflake_python():
             default="Other",
         )
 
-        # ── Parse user_agent → operating system  (Android before Linux:
-        #    Android UAs contain "Linux" too) ────────────────────────────────
+        # parse user_agent to OS (Android before Linux, Android UAs contain "Linux")
         raw["os"] = np.select(
             [
                 ua.str.contains("Windows NT",  case=False, na=False),
@@ -166,6 +152,8 @@ def s3_to_snowflake_python():
         metrics.drop(columns=["total_subtotal", "total_tax"], inplace=True)
 
         # ── Write the mart back to Snowflake ──────────────────────────────────
+        from snowflake.connector.pandas_tools import write_pandas
+
         with sf.get_conn() as conn:
             success, _, nrows, _ = write_pandas(
                 conn,
@@ -173,12 +161,10 @@ def s3_to_snowflake_python():
                 table_name        = OUTPUT_TABLE,
                 database          = SNOWFLAKE_DATABASE,
                 schema            = SNOWFLAKE_SCHEMA,
-                auto_create_table = True,
-                overwrite         = True,
                 quote_identifiers = False,
             )
         assert success, "Snowflake write_pandas() reported failure"
-        print(f"Wrote {nrows:,} customer rows → {SNOWFLAKE_DATABASE}.{SNOWFLAKE_SCHEMA}.{OUTPUT_TABLE}")
+        print(f"Wrote {nrows:,} customer rows into {SNOWFLAKE_DATABASE}.{SNOWFLAKE_SCHEMA}.{OUTPUT_TABLE}")
         return nrows
 
     wait_for_s3_file >> load_raw_data() >> python_transform()

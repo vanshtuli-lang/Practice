@@ -1,22 +1,12 @@
 """
-S3 → Snowflake clickstream pipeline (dbt Core via Astronomer Cosmos)
+Same clickstream ingestion as s3_to_snowflake_python but hands the transform off to dbt via Cosmos.
 
-Flow:
-  1. wait_for_s3_file — deferrable S3KeySensor (frees worker slot while waiting)
-  2. load_raw_data    — ObjectStoragePath pulls the Parquet, write_pandas loads it
-  3. dbt_transform    — Cosmos DbtTaskGroup runs stg_clickstream → fct_customer_metrics,
-                        then runs all dbt tests (TestBehavior.AFTER_ALL)
+Waits for the parquet to land in S3, loads it into RAW_CLICKSTREAM_ORDERS,
+then Cosmos runs the dbt models and tests from there.
 
-Astro / Airflow 3 features used:
-  • Astronomer Cosmos        — dbt → Airflow tasks
-  • airflow.io ObjectStorage — cloud-agnostic file I/O
-  • Deferrable S3 sensor     — async waiting via Astro Runtime triggerer
-  • Asset outlet             — downstream DAGs can schedule on data changes
-  • owner_links              — owner clickable in the Airflow UI
-
-  This is click stream data - Customer X spent $Y on date Z, using device W, after browsing for N seconds.
-  Total of 1 M rows in the data set.
-  Waiting for file in S3 -> parsing the user_agent field (example field: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15
+This is click stream data - Customer X spent $Y on date Z, using device W, after browsing for N seconds.
+Total of 1 M rows in the data set.
+Waiting for file in S3 -> parsing the user_agent field (example field: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15
  (KHTML, like Gecko) Version/17.3 Safari/605.1.15) -> to bring out browser = safari and os = macOS
  We create a view in the STG area that aggregates data by customers.
 We create a final METRICS table that has aggregate of data per customer -> total orders, total, spend, avg session duration, popular ordering platform etc
@@ -115,12 +105,10 @@ def s3_to_snowflake_dbt():
                 table_name        = RAW_TABLE,
                 database          = SNOWFLAKE_DATABASE,
                 schema            = SNOWFLAKE_SCHEMA,
-                auto_create_table = True,
-                overwrite         = True,
                 quote_identifiers = False,
             )
         assert success, "Snowflake write_pandas() reported failure"
-        print(f"Loaded {nrows:,} rows → {SNOWFLAKE_DATABASE}.{SNOWFLAKE_SCHEMA}.{RAW_TABLE}")
+        print(f"Loaded {nrows:,} rows into {SNOWFLAKE_DATABASE}.{SNOWFLAKE_SCHEMA}.{RAW_TABLE}")
         return nrows
 
     # ── Cosmos renders each dbt model as its own Airflow task and runs all
