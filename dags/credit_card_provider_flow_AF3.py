@@ -45,7 +45,7 @@ def credit_card_provider_flow_AF3():
         import io
         from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 
-        hook = S3Hook(aws_conn_id="vansh_AWS")
+        hook = S3Hook(aws_conn_id="s3_read_write")
         content = hook.read_key(key=S3_KEY, bucket_name=S3_BUCKET)
 
         customers = []
@@ -149,7 +149,7 @@ def credit_card_provider_flow_AF3():
             print("No records to upsert.")
             return
 
-        hook = SnowflakeHook(snowflake_conn_id="vansh_snowflake")
+        hook = SnowflakeHook(snowflake_conn_id="snowflake")
 
         # Build a single VALUES block for all rows so the entire batch is one statement
         row_placeholders = ",\n            ".join(["(%s, %s, %s, %s, %s, %s)"] * len(portfolios))
