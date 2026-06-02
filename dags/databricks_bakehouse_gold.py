@@ -65,7 +65,7 @@ def databricks_bakehouse_gold():
             rows = hook.get_records(f"""
                 SELECT storeID,
                        COUNT(*)       AS transactions,
-                       SUM(netAmount) AS revenue
+                       SUM(quantity * unitPrice) AS revenue
                 FROM {SOURCE}
                 GROUP BY storeID
                 ORDER BY revenue DESC
@@ -81,7 +81,7 @@ def databricks_bakehouse_gold():
             rows = hook.get_records(f"""
                 SELECT product,
                        SUM(quantity)  AS units_sold,
-                       SUM(netAmount) AS revenue
+                       SUM(quantity * unitPrice) AS revenue
                 FROM {SOURCE}
                 GROUP BY product
                 ORDER BY units_sold DESC
@@ -97,7 +97,7 @@ def databricks_bakehouse_gold():
             rows = hook.get_records(f"""
                 SELECT date_format(dateTime, 'EEEE') AS day,
                        COUNT(*)                      AS transactions,
-                       ROUND(AVG(netAmount), 2)      AS avg_sale
+                       ROUND(AVG(quantity * unitPrice), 2)      AS avg_sale
                 FROM {SOURCE}
                 GROUP BY day
                 ORDER BY transactions DESC
