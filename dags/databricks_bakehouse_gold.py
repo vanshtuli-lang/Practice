@@ -79,16 +79,16 @@ def databricks_bakehouse_gold():
 
         elif dimension == "by_product":
             rows = hook.get_records(f"""
-                SELECT sku,
+                SELECT product,
                        SUM(quantity)  AS units_sold,
                        SUM(netAmount) AS revenue
                 FROM {SOURCE}
-                GROUP BY sku
+                GROUP BY product
                 ORDER BY units_sold DESC
                 LIMIT 5
             """)
             print("\n🥐 TOP 5 PRODUCTS BY UNITS SOLD")
-            print(f"{'SKU':<20} {'Units Sold':>12} {'Revenue':>15}")
+            print(f"{'Product':<20} {'Units Sold':>12} {'Revenue':>15}")
             print("-" * 49)
             for r in rows:
                 print(f"{str(r[0]):<20} {r[1]:>12,} {float(r[2]):>15,.2f}")
