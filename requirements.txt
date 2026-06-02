@@ -2,6 +2,7 @@
 # https://www.astronomer.io/docs/astro/runtime-image-architecture#provider-packages
 apache-airflow-providers-amazon
 apache-airflow-providers-snowflake
+apache-airflow-providers-databricks
 
 # ── airflow.io ObjectStoragePath backend for S3 ────────────────────────────────
 # Provides the s3:// filesystem abstraction used by both DAGs.

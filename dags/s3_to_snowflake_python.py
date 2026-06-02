@@ -22,8 +22,8 @@ from airflow.sdk import Asset, ObjectStoragePath, dag, task
 #Connections
 # Production defaults match credit_card_provider_flow_AF3.  Local dev can
 # override via .env when airflow_settings.yaml uses different conn IDs.
-AWS_CONN_ID       = os.environ.get("AWS_CONN_ID",       "vansh_AWS")
-SNOWFLAKE_CONN_ID = os.environ.get("SNOWFLAKE_CONN_ID", "vansh_snowflake")
+AWS_CONN_ID       = os.environ.get("AWS_CONN_ID",       "s3_read_write")
+SNOWFLAKE_CONN_ID = os.environ.get("SNOWFLAKE_CONN_ID", "snowflake")
 
 #Sources
 S3_BUCKET = "vanshtuli-bucket"
