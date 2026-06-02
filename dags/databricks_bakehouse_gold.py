@@ -9,7 +9,7 @@ dimension. No tables written, no side effects. Pure read-and-report.
 from airflow.sdk import dag, task
 from pendulum import datetime
 
-DATABRICKS_CONN_ID      = "databricks_emea"
+DATABRICKS_CONN_ID      = "vansh_databricks"
 SQL_WAREHOUSE_HTTP_PATH = "/sql/1.0/warehouses/127187a13c10e4c1"
 
 SOURCE = "samples.bakehouse.sales_transactions"

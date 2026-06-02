@@ -149,7 +149,7 @@ def credit_card_provider_flow_AF3():
             print("No records to upsert.")
             return
 
-        hook = SnowflakeHook(snowflake_conn_id="snowflake")
+        hook = SnowflakeHook(snowflake_conn_id="vansh_snowflake")
 
         # Build a single VALUES block for all rows so the entire batch is one statement
         row_placeholders = ",\n            ".join(["(%s, %s, %s, %s, %s, %s)"] * len(portfolios))
