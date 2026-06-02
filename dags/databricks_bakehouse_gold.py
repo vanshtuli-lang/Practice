@@ -9,7 +9,7 @@ dimension. No tables written, no side effects. Pure read-and-report.
 from airflow.sdk import dag, task
 from pendulum import datetime
 
-DATABRICKS_CONN_ID      = "vansh_databricks"
+DATABRICKS_CONN_ID      = "databricks_emea"
 SQL_WAREHOUSE_HTTP_PATH = "/sql/1.0/warehouses/127187a13c10e4c1"
 
 SOURCE = "samples.bakehouse.sales_transactions"
@@ -71,7 +71,7 @@ def databricks_bakehouse_gold():
                 ORDER BY revenue DESC
                 LIMIT 5
             """)
-            print("\n📦 TOP 5 STORES BY REVENUE")
+            print("\nTOP 5 STORES BY REVENUE")
             print(f"{'Store':<15} {'Transactions':>15} {'Revenue':>15}")
             print("-" * 47)
             for r in rows:
