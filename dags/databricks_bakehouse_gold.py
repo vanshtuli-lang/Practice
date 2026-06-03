@@ -1,9 +1,9 @@
 """
-Demo: Bakehouse Sales Report.
+Bakehouse Sales Report.
 
-Talk track: reads directly from the Databricks bakehouse sample data, validates it,
-then fans out three console reports in parallel using dynamic task mapping — one per
-dimension. No tables written, no side effects. Pure read-and-report.
+Reads directly from the Databricks bakehouse sample data, validates it, then
+fans out three console reports in parallel — one per dimension (store, product,
+day of week). Read-only, no tables written.
 """
 
 from airflow.sdk import dag, task
@@ -102,13 +102,12 @@ def databricks_bakehouse_gold():
                 GROUP BY day
                 ORDER BY transactions DESC
             """)
-            print("\n📅 SALES BY DAY OF WEEK")
+            print("\nSALES BY DAY OF WEEK")
             print(f"{'Day':<15} {'Transactions':>15} {'Avg Sale':>12}")
             print("-" * 44)
             for r in rows:
                 print(f"{str(r[0]):<15} {r[1]:>15,} {float(r[2]):>12,.2f}")
 
-    # ── wire it up ────────────────────────────────────────────────────────────
     validated  = validate_source()
     dimensions = get_dimensions()
     reports    = print_report.expand(dimension=dimensions)

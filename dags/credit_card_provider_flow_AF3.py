@@ -8,16 +8,34 @@ at 8% with a $2k floor.
 """
 
 from __future__ import annotations
+import json
 from datetime import datetime
-from airflow.sdk import dag, task
+from airflow.sdk import dag, task, Variable
 from airflow.task.trigger_rule import TriggerRule
 
-PREMIUM_THRESHOLD  = 100_000
-PREMIUM_PRODUCT    = "Infinite Sapphire"
-STANDARD_PRODUCT   = "Classic Rewards"
-PREMIUM_RATE       = 0.15
-STANDARD_RATE      = 0.08
-STANDARD_FLOOR     = 2_000
+# Local fallback so the DAG parses cleanly without a live Airflow metadata DB
+_DEFAULT_CONFIG = {
+    "premium_income_threshold": 100_000,
+    "premium_rate": 0.15,
+    "standard_rate": 0.08,
+    "standard_floor": 2_000,
+    "card_products": {
+        "premium": "Infinite Sapphire",
+        "standard": "Classic Rewards",
+    },
+}
+
+try:
+    _cfg = Variable.get("credit_card_config", deserialize_json=True)
+except Exception:
+    _cfg = _DEFAULT_CONFIG
+
+PREMIUM_THRESHOLD = _cfg["premium_income_threshold"]
+PREMIUM_PRODUCT   = _cfg["card_products"]["premium"]
+STANDARD_PRODUCT  = _cfg["card_products"]["standard"]
+PREMIUM_RATE      = _cfg["premium_rate"]
+STANDARD_RATE     = _cfg["standard_rate"]
+STANDARD_FLOOR    = _cfg["standard_floor"]
 
 S3_BUCKET = "vanshtuli-bucket"
 S3_KEY    = "CSV/daily_customer_applications.csv"
