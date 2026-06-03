@@ -10,11 +10,11 @@ production, swap the import to SFTPTrigger and nothing else changes.
 from pendulum import datetime
 
 from airflow.sdk import dag, task, Asset, AssetWatcher
+from airflow.triggers.base import BaseEventTrigger
+from airflow.providers.standard.triggers.file import FileTrigger
 
-# DEMO SWAP: in production this becomes:
-#   from airflow.providers.sftp.triggers.sftp import SFTPTrigger as VendorDropTrigger
-# The watcher contract is identical — only the trigger class changes.
-from airflow.providers.standard.triggers.file import FileTrigger as VendorDropTrigger
+class VendorDropTrigger(FileTrigger, BaseEventTrigger):
+    pass
 
 MOCK_DROP_PATH = "/tmp/mock_sftp_drop/vendor_data.csv"
 
