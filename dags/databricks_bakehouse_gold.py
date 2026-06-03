@@ -63,16 +63,16 @@ def databricks_bakehouse_gold():
 
         if dimension == "by_store":
             rows = hook.get_records(f"""
-                SELECT storeID,
-                       COUNT(*)       AS transactions,
-                       SUM(quantity * unitPrice) AS revenue
+                SELECT customerID,
+                       COUNT(*)                   AS transactions,
+                       SUM(quantity * unitPrice)  AS revenue
                 FROM {SOURCE}
-                GROUP BY storeID
+                GROUP BY customerID
                 ORDER BY revenue DESC
                 LIMIT 5
             """)
-            print("\nTOP 5 STORES BY REVENUE")
-            print(f"{'Store':<15} {'Transactions':>15} {'Revenue':>15}")
+            print("\nTOP 5 CUSTOMERS BY REVENUE")
+            print(f"{'Customer':<15} {'Transactions':>15} {'Revenue':>15}")
             print("-" * 47)
             for r in rows:
                 print(f"{str(r[0]):<15} {r[1]:>15,} {float(r[2]):>15,.2f}")
