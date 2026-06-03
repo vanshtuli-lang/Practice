@@ -19,27 +19,20 @@ from datetime import datetime
 from airflow.providers.amazon.aws.sensors.s3 import S3KeySensor
 from airflow.sdk import Asset, ObjectStoragePath, dag, task
 
-#Connections
-# Production defaults match credit_card_provider_flow_AF3.  Local dev can
-# override via .env when airflow_settings.yaml uses different conn IDs.
+# Local dev can override these via .env when conn IDs differ
 AWS_CONN_ID       = os.environ.get("AWS_CONN_ID",       "s3_read_write")
 SNOWFLAKE_CONN_ID = os.environ.get("SNOWFLAKE_CONN_ID", "snowflake")
 
-#Sources
 S3_BUCKET = "vanshtuli-bucket"
 S3_KEY    = "parquet/mock_clickstream_orders.parquet"
 S3_URI    = f"s3://{S3_BUCKET}/{S3_KEY}"
 
-# ── Snowflake target ──────────────────────────────────────────────────────────
 SNOWFLAKE_DATABASE = "SANDBOX"
 SNOWFLAKE_SCHEMA   = "VANSHTULI"
 RAW_TABLE          = "RAW_CLICKSTREAM_ORDERS"
 OUTPUT_TABLE       = "PY_CUSTOMER_METRICS"
 
-# ── Asset (AF3 data-aware scheduling) ─────────────────────────────────────────
-# Downstream DAGs can do schedule=[py_customer_metrics_asset] and run whenever
-# this DAG materialises fresh data.  Using the dotted Snowflake identifier as
-# the asset name (no "://") avoids the snowflake provider's strict URI validator.
+# Downstream DAGs subscribe to this asset to run whenever fresh metrics land
 py_customer_metrics_asset = Asset("SANDBOX.VANSHTULI.PY_CUSTOMER_METRICS")
 
 
@@ -55,7 +48,7 @@ py_customer_metrics_asset = Asset("SANDBOX.VANSHTULI.PY_CUSTOMER_METRICS")
 )
 def s3_to_snowflake_python():
 
-    # ── Wait for the file to land in S3 (deferrable = async / no worker slot)
+    # Deferrable so the worker slot is freed while we wait
     wait_for_s3_file = S3KeySensor(
         task_id      = "wait_for_s3_file",
         bucket_key   = S3_URI,

@@ -1,24 +1,7 @@
 /*
-  stg_clickstream.sql
-  ═══════════════════
-  Staging model for the raw clickstream source.
-
-  Responsibilities
-  ────────────────
-  1. Select and alias all raw columns (no business logic lives in the source).
-  2. Parse the free-text `user_agent` field into structured `browser` and `os`
-     columns using Snowflake CASE / ILIKE expressions.
-
-  Design notes
-  ────────────
-  • Materialised as a VIEW so it always reflects the latest raw landing data.
-  • The CASE ordering matters: Chrome must be matched *before* Safari because
-    Chrome's UA string also contains the token "Safari".
-  • ILIKE is used throughout for case-insensitive matching — UA strings are
-    not guaranteed to be consistently cased across browser versions.
-  • The parsed columns intentionally mirror the regex extraction performed in
-    Branch B (python_transform_branch) so the two branches produce equivalent
-    output for a fair benchmark comparison.
+  Staging view for the raw clickstream source. Parses the free-text user_agent
+  field into structured browser and os columns. CASE ordering matters: Edge and
+  Chrome must be matched before Safari because their UAs also contain "Safari".
 */
 
 WITH source AS (
@@ -38,13 +21,7 @@ parsed AS (
         click_id,
         session_duration_secs,
 
-        /*
-          browser
-          ───────
-          Detects Chrome before Safari because Chrome UAs include the token
-          "Safari" as a compatibility hint.  Edge is detected before Chrome
-          for the same reason (Edge UAs also contain "Chrome").
-        */
+        -- Edge before Chrome before Safari — each UA contains the next one's token
         CASE
             WHEN user_agent ILIKE '%Edg/%'                        THEN 'Edge'
             WHEN user_agent ILIKE '%Chrome/%'
@@ -57,13 +34,7 @@ parsed AS (
             ELSE 'Other'
         END AS browser,
 
-        /*
-          os
-          ──
-          Platform detection from common UA tokens.  Android must precede
-          Linux because Android UAs include the token "Linux".
-          iPhone / iPad detection covers both mobile Safari and Chrome-on-iOS.
-        */
+        -- Android before Linux — Android UAs contain "Linux"
         CASE
             WHEN user_agent ILIKE '%Windows NT%'                  THEN 'Windows'
             WHEN user_agent ILIKE '%Macintosh%'

@@ -28,38 +28,28 @@ from cosmos.profiles import (
     SnowflakeUserPasswordProfileMapping,
 )
 
-# ── Connections ────────────────────────────────────────────────────────────────
-# Production defaults match credit_card_provider_flow_AF3.  Local dev can
-# override via .env when airflow_settings.yaml uses different conn IDs.
+# Local dev can override these via .env when conn IDs differ
 AWS_CONN_ID       = os.environ.get("AWS_CONN_ID",       "s3_read_write")
 SNOWFLAKE_CONN_ID = os.environ.get("SNOWFLAKE_CONN_ID", "snowflake")
 
-# Cosmos needs different profile mappings for password vs key-file Snowflake
-# auth.  SNOWFLAKE_AUTH=key in .env makes local dev (RSA key) work; production
-# leaves this unset, defaulting to "password".
+# Pick the right Cosmos profile mapping for password vs RSA key auth
 _AUTH = os.environ.get("SNOWFLAKE_AUTH", "password").lower()
 _ProfileMapping = (
     SnowflakeEncryptedPrivateKeyFilePemProfileMapping if _AUTH == "key"
     else SnowflakeUserPasswordProfileMapping
 )
 
-# ── S3 source ─────────────────────────────────────────────────────────────────
 S3_BUCKET = "vanshtuli-bucket"
 S3_KEY    = "parquet/mock_clickstream_orders.parquet"
 S3_URI    = f"s3://{S3_BUCKET}/{S3_KEY}"
 
-# ── Snowflake target ──────────────────────────────────────────────────────────
 SNOWFLAKE_DATABASE = "SANDBOX"
 SNOWFLAKE_SCHEMA   = "VANSHTULI"
 RAW_TABLE          = "RAW_CLICKSTREAM_ORDERS"
 
-# ── dbt project location ──────────────────────────────────────────────────────
 DBT_PROJECT_PATH = Path(__file__).parent / "dbt" / "clickstream_analytics"
 
-# ── Asset (AF3 data-aware scheduling) ─────────────────────────────────────────
-# Downstream DAGs can do schedule=[fct_customer_metrics_asset] and run whenever
-# this DAG materialises fresh data.  Using the dotted Snowflake identifier as
-# the asset name (no "://") avoids the snowflake provider's strict URI validator.
+# Downstream DAGs subscribe to this asset to run whenever fresh metrics land
 fct_customer_metrics_asset = Asset("SANDBOX.VANSHTULI.FCT_CUSTOMER_METRICS")
 
 
@@ -75,7 +65,7 @@ fct_customer_metrics_asset = Asset("SANDBOX.VANSHTULI.FCT_CUSTOMER_METRICS")
 )
 def s3_to_snowflake_dbt():
 
-    # ── Wait for the file to land in S3 (deferrable = async / no worker slot)
+    # Deferrable so the worker slot is freed while we wait
     wait_for_s3_file = S3KeySensor(
         task_id      = "wait_for_s3_file",
         bucket_key   = S3_URI,
@@ -111,8 +101,7 @@ def s3_to_snowflake_dbt():
         print(f"Loaded {nrows:,} rows into {SNOWFLAKE_DATABASE}.{SNOWFLAKE_SCHEMA}.{RAW_TABLE}")
         return nrows
 
-    # ── Cosmos renders each dbt model as its own Airflow task and runs all
-    #    dbt tests after the models complete (TestBehavior.AFTER_ALL).
+    # Cosmos renders each dbt model as its own Airflow task; tests run AFTER_ALL
     dbt_transform = DbtTaskGroup(
         group_id="dbt_transform",
         project_config=ProjectConfig(dbt_project_path=DBT_PROJECT_PATH),

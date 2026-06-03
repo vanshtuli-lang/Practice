@@ -1,32 +1,9 @@
 {{ config(unique_key='customer_id') }}
 
 /*
-  fct_customer_metrics.sql
-  ════════════════════════
-  Mart-layer fact table: one row per customer with aggregated spend and
-  engagement metrics derived from the stg_clickstream staging view.
-
-  Transformation steps
-  ────────────────────
-  1. ranked       — adds an order-recency rank per customer using an
-                    analytical window function.  Rank 1 = most recent order.
-                    Directly mirrors Branch B's pandas .rank() computation.
-  2. spend_agg    — GROUP BY customer_id for monetary and session metrics.
-  3. browser_mode — finds the most frequently used browser per customer.
-                    QUALIFY + ROW_NUMBER avoids a self-join and is idiomatic
-                    Snowflake SQL.  Ties broken alphabetically for determinism.
-  4. os_mode      — same approach for operating system.
-  5. final        — joins all CTEs on customer_id.
-
-  Design notes
-  ────────────
-  • Materialised as a TABLE so the mart is pre-computed and query-ready for
-    downstream BI tools and the benchmark evaluator task.
-  • QUALIFY is Snowflake-specific syntax; it filters the result of window
-    functions without a subquery wrapper — equivalent to a WHERE clause on
-    the window function result.
-  • The output column names intentionally match the pandas branch output in
-    python_transform_branch so both tables can be diffed for correctness.
+  Mart fact table: one row per customer with aggregated spend, session, and
+  most-common browser/OS metrics derived from stg_clickstream. Materialised as
+  a table so downstream BI queries are fast.
 */
 
 WITH staged AS (
@@ -35,12 +12,7 @@ WITH staged AS (
 
 ),
 
-/*
-  Step 1 — Order recency ranking
-  ──────────────────────────────
-  RANK() assigns the same rank to ties (identical order_date within a
-  customer), matching pandas .rank(method='min').  Rank 1 = newest order.
-*/
+-- Order recency rank per customer (1 = newest)
 ranked AS (
 
     SELECT
@@ -54,9 +26,7 @@ ranked AS (
 
 ),
 
-/*
-  Step 2 — Per-customer spend and session aggregation
-*/
+-- Per-customer spend and session aggregates
 spend_agg AS (
 
     SELECT
@@ -72,13 +42,7 @@ spend_agg AS (
 
 ),
 
-/*
-  Step 3 — Most common browser per customer
-  ──────────────────────────────────────────
-  Inner query counts (customer_id, browser) frequency.
-  QUALIFY keeps only the row with the highest frequency; alphabetical tie-
-  breaking ensures deterministic output across re-runs.
-*/
+-- Most common browser per customer; alphabetical tiebreak for determinism
 browser_mode AS (
 
     SELECT
@@ -101,9 +65,7 @@ browser_mode AS (
 
 ),
 
-/*
-  Step 4 — Most common OS per customer  (identical pattern to browser_mode)
-*/
+-- Most common OS per customer
 os_mode AS (
 
     SELECT
@@ -126,9 +88,7 @@ os_mode AS (
 
 ),
 
-/*
-  Step 5 — Final join: one row per customer
-*/
+-- One row per customer
 final AS (
 
     SELECT
