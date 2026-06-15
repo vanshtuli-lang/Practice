@@ -25,7 +25,7 @@ LANDING_TABLE    = "CSV_LANDING_ZONE"
 AUDIT_TABLE      = "CSV_INGEST_AUDIT"
 
 # Downstream DAGs can subscribe to this — they'll auto-trigger when we're done
-landing_zone_ready = Asset("snowflake://SANDBOX.VANSHTULI.CSV_LANDING_ZONE")
+landing_zone_ready = Asset("SANDBOX.VANSHTULI.CSV_LANDING_ZONE")
 
 
 @dag(
