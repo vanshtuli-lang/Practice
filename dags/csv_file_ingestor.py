@@ -115,7 +115,7 @@ def csv_file_ingestor():
         return nrows
 
     @task
-    def normalize_dates(rows_loaded: int) -> int:
+    def normalize_dates() -> int:
         """
         Find any dates in MM/DD/YYYY format and flip them to YYYY-MM-DD.
         Runs entirely as a Snowflake UPDATE — nothing pulled into the worker.
@@ -166,6 +166,7 @@ def csv_file_ingestor():
     lz_done    = trigger_lz_job(decrypted)
     rows       = load_to_snowflake(lz_done)
     fixes      = normalize_dates()
+    rows >> fixes
     log_audit(rows, fixes)
 
     wait_for_file >> decrypted
