@@ -106,7 +106,7 @@ def csv_file_ingestor():
                 table_name        = LANDING_TABLE,
                 database          = SNOWFLAKE_DB,
                 schema            = SNOWFLAKE_SCHEMA,
-                auto_create_table = True,
+                auto_create_table = False,
                 quote_identifiers = False,
             )
 
