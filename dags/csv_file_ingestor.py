@@ -34,7 +34,7 @@ landing_zone_ready = Asset("csv-landing-zone-ready")
     start_date=datetime(2026, 1, 1),
     catchup=False,
     dagrun_timeout=timedelta(hours=1),
-    default_args={"owner": "vansh-tuli", "retries": 1},
+    default_args={"owner": "vansh-tuli", "retries": 0},
     tags=["csv", "s3", "snowflake", "landing-zone"],
     doc_md=__doc__,
 )
