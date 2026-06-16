@@ -14,7 +14,7 @@ from airflow.providers.amazon.aws.sensors.s3 import S3KeySensor
 from airflow.sdk import Asset, dag, task
 
 AWS_CONN_ID       = os.environ.get("AWS_CONN_ID",       "s3_read_write")
-SNOWFLAKE_CONN_ID = os.environ.get("SNOWFLAKE_CONN_ID", "vansh_snowflake")
+SNOWFLAKE_CONN_ID = os.environ.get("SNOWFLAKE_CONN_ID", "snowflake")
 
 S3_BUCKET      = "vanshtuli-bucket"
 S3_KEY         = "CSV/sample_orders_demo.csv.pgp"
@@ -34,7 +34,7 @@ landing_zone_ready = Asset("csv-landing-zone-ready")
     start_date=datetime(2026, 1, 1),
     catchup=False,
     dagrun_timeout=timedelta(hours=1),
-    default_args={"owner": "vansh-tuli", "retries": 1},
+    default_args={"owner": "vansh-tuli", "retries": 0},
     tags=["csv", "s3", "snowflake", "landing-zone"],
     doc_md=__doc__,
 )
